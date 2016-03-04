@@ -110,6 +110,7 @@ class TaskSerializerTest extends FunSuite with Mockito with Matchers with GivenW
     marathonTask2 should equal(marathonTask)
   }
 
+  // FIXME (3221): add Fixture and tests for Reserved, LaunchedOnReservation, LaunchedEphemeral, Failure cases
   private[this] val appId = PathId.fromSafePath("/test")
   private[this] val taskId = Task.Id("task")
   private[this] val sampleHost: String = "somehost"
@@ -156,7 +157,7 @@ class TaskSerializerTest extends FunSuite with Mockito with Matchers with GivenW
       .setVersion(appVersion.toString)
       .setStatus(sampleTaskStatus)
       .setSlaveId(sampleSlaveId)
-      .setReservationWithVolumes(MarathonTask.ReservationWithVolumes.newBuilder.addLocalVolumeIds(
+      .setReservation(MarathonTask.Reservation.newBuilder.addLocalVolumeIds(
         LocalVolumeId(appId, "my-volume", "uuid-123").idString))
       .build()
 
