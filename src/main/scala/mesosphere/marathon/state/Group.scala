@@ -233,24 +233,20 @@ object Group {
   }
 
   private def noAppsAndGroupsWithSameName: Validator[Group] =
-    new Validator[Group] {
-      def apply(group: Group) = {
+    new RuleValidator[Group](
+      group => {
         val groupIds = group.groups.map(_.id)
         val clashingIds = group.apps.map(_.id).intersect(groupIds)
 
-        if (clashingIds.isEmpty) Success
-        else Failure(Set(RuleViolation(group,
-          s"Groups and Applications may not have the same identifier: ${clashingIds.mkString(", ")}.", None)))
-      }
-    }
+        clashingIds.isEmpty
+      },
+      s"Groups and Applications may not have the same identifier."
+    )
 
-  private def noCyclicDependencies(group: Group): Validator[Set[PathId]] =
-    new Validator[Set[PathId]] {
-      def apply(dependencies: Set[PathId]) = {
-        if (group.hasNonCyclicDependencies) Success
-        else Failure(Set(RuleViolation(group, "Dependency graph has cyclic dependencies.", None)))
-      }
-    }
+  private def noCyclicDependencies(group: Group): Validator[Set[PathId]] = new RuleValidator[Set[PathId]](
+    _ => group.hasNonCyclicDependencies,
+    "Dependency graph has cyclic dependencies."
+  )
 
   private def validPorts: Validator[Group] = {
     new Validator[Group] {

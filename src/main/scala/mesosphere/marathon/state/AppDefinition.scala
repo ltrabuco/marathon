@@ -391,7 +391,7 @@ object AppDefinition {
       * @param version The versioning timestamp (we are currently assuming that this is the same as lastChangeAt)
       * @param lastScalingAt The time stamp of the last change including scaling or restart changes
       * @param lastConfigChangeAt The time stamp of the last change that changed configuration
-      *                               besides scaling or restarting
+      *                           besides scaling or restarting
       */
     case class FullVersionInfo(
         version: Timestamp,
@@ -500,54 +500,48 @@ object AppDefinition {
     ports.filterNot(_ == AppDefinition.RandomPortValue)
   }
 
-  private def containsCmdArgsContainerValidator: Validator[AppDefinition] = {
-    new Validator[AppDefinition] {
-      override def apply(app: AppDefinition): Result = {
-        val cmd = app.cmd.nonEmpty
-        val args = app.args.nonEmpty
-        val container = app.container.exists(_ != Container.Empty)
-        if ((cmd ^ args) || (!(cmd || args) && container)) Success
-        else Failure(Set(RuleViolation(app,
-          "AppDefinition must either contain one of 'cmd' or 'args', and/or a 'container'.", None)))
-      }
-    }
-  }
+  private def containsCmdArgsContainerValidator: Validator[AppDefinition] = new RuleValidator[AppDefinition](
+    app => {
+      val cmd = app.cmd.nonEmpty
+      val args = app.args.nonEmpty
+      val container = app.container.exists(_ != Container.Empty)
+      (cmd ^ args) || (!(cmd || args) && container)
+    },
+    "AppDefinition must either contain one of 'cmd' or 'args', and/or a 'container'."
+  )
 
-  private def portIndixIsValid(hostPortsIndices: Range) = new Validator[HealthCheck] {
-    override def apply(healthCheck: HealthCheck): Result = {
-      if (healthCheck.protocol == Protocol.COMMAND || (healthCheck.portIndex match {
-        case Some(idx) => hostPortsIndices contains idx
-        case None      => hostPortsIndices.length == 1 && hostPortsIndices.head == 0
-      })) Success
-      else Failure(Set(RuleViolation(healthCheck,
-        "Health check port indices must address an element of the ports array or container port mappings.", None)))
-    }
-  }
+  private def portIndixIsValid(hostPortsIndices: Range): Validator[HealthCheck] = new RuleValidator[HealthCheck](
+    hc => hc.protocol == Protocol.COMMAND || (hc.portIndex match {
+      case Some(idx) => hostPortsIndices contains idx
+      case None      => hostPortsIndices.length == 1 && hostPortsIndices.head == 0
+    }),
+    "Health check port indices must address an element of the ports array or container port mappings."
+  )
 
   def residentUpdateIsValid(from: AppDefinition): Validator[AppDefinition] = {
-    def changeNoVolumes: Validator[AppDefinition] = new Validator[AppDefinition] {
-      override def apply(to: AppDefinition): Result = {
+    val changeNoVolumes = new RuleValidator[AppDefinition](
+      to => {
         val fromVolumes = from.persistentVolumes
         val toVolumes = to.persistentVolumes
         def sameSize = fromVolumes.size == toVolumes.size
         def noChange = from.persistentVolumes.forall { fromVolume =>
           toVolumes.find(_.containerPath == fromVolume.containerPath).contains(fromVolume)
         }
-        if (sameSize && noChange) Success
-        else Failure(Set(RuleViolation(to, "Persistent volumes can not be changed!", None)))
-      }
-    }
-    def changeNoResources: Validator[AppDefinition] = new Validator[AppDefinition] {
-      override def apply(to: AppDefinition): Result = {
-        if (from.cpus != to.cpus ||
-          from.mem != to.mem ||
-          from.disk != to.disk ||
-          from.portDefinitions != to.portDefinitions)
-          Failure(Set(RuleViolation(to, "Resident Tasks may not change resource requirements!", None)))
-        else
-          Success
-      }
-    }
+        sameSize && noChange
+      },
+      "Persistent volumes can not be changed!"
+    )
+
+    val changeNoResources = new RuleValidator[AppDefinition](
+      to => {
+        from.cpus == to.cpus &&
+          from.mem == to.mem &&
+          from.disk == to.disk &&
+          from.portDefinitions == to.portDefinitions
+      },
+      "Resident Tasks may not change resource requirements!"
+    )
+
     validator[AppDefinition] { app =>
       app should changeNoVolumes
       app should changeNoResources
